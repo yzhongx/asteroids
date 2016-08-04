@@ -94,6 +94,8 @@ Sprite = function () {
 
   this.children = {};
 
+  this.color    = 'black';
+  this.solid    = false;
   this.visible  = false;
   this.reap     = false;
   this.bridgesH = true;
@@ -242,6 +244,9 @@ Sprite = function () {
       this.children[child].draw();
     }
 
+    this.context.strokeStyle = this.color;
+    this.context.fillStyle = this.color;
+
     this.context.beginPath();
 
     this.context.moveTo(this.points[0], this.points[1]);
@@ -253,6 +258,9 @@ Sprite = function () {
 
     this.context.closePath();
     this.context.stroke();
+    if (this.solid) {
+      this.context.fill();
+    }
   };
   this.findCollisionCanidates = function () {
     if (!this.visible || !this.currentNode) return [];
@@ -382,7 +390,12 @@ Ship = function () {
               0, -11,
               6,   7]);
 
+  this.color = 'navy';
+  this.solid = true;
+
   this.children.exhaust = new Sprite();
+  this.children.exhaust.solid = true;
+  this.children.exhaust.color = 'red';
   this.children.exhaust.init("exhaust",
                              [-3,  6,
                                0, 11,
@@ -668,6 +681,8 @@ Asteroid = function () {
               -4, -10,
               -4,  -5]);
 
+  this.color = 'lightgray';
+  this.solid = true;
   this.visible = true;
   this.scale = 6;
   this.postMove = this.wrapPostMove;
@@ -753,6 +768,7 @@ Explosion = function () {
   this.draw = function () {
     if (this.visible) {
       this.context.save();
+      this.context.strokeStyle = 'red';
       this.context.lineWidth = 1.0 / this.scale;
       this.context.beginPath();
       for (var i = 0; i < 5; i++) {
@@ -976,7 +992,7 @@ Game = {
       this.state = 'waiting';
     },
     waiting: function () {
-      Text.renderText(ipad ? 'Touch Sreen to Start' : 'Press Space to Start', 36, Game.canvasWidth/2 - 270, Game.canvasHeight/2);
+      Text.renderText(window.ipad ? 'Touch Screen to Start' : 'Press Space to Start', 36, Game.canvasWidth/2 - 270, Game.canvasHeight/2);
       if (KEY_STATUS.space || window.gameStart) {
         KEY_STATUS.space = false; // hack so we don't shoot right away
         window.gameStart = false;
@@ -1165,6 +1181,8 @@ $(function () {
   Game.coin = coin;
 
   var i, j = 0;
+
+  var paused = false;
   var showFramerate = false;
   var avgFramerate = 0;
   var frameCount = 0;
@@ -1174,6 +1192,22 @@ $(function () {
   var thisFrame;
   var elapsed;
   var delta;
+
+  var canvasNode = canvas[0];
+
+  // shim layer with setTimeout fallback
+  // from here:
+  // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
+  window.requestAnimFrame = (function () {
+    return  window.requestAnimationFrame       ||
+            window.webkitRequestAnimationFrame ||
+            window.mozRequestAnimationFrame    ||
+            window.oRequestAnimationFrame      ||
+            window.msRequestAnimationFrame     ||
+            function (/* function */ callback, /* DOMElement */ element) {
+              window.setTimeout(callback, 1000 / 60);
+            };
+  })();
 
   var mainLoop = function () {
     context.clearRect(0, 0, Game.canvasWidth, Game.canvasHeight);
@@ -1235,9 +1269,15 @@ $(function () {
       avgFramerate = frameCount;
       frameCount = 0;
     }
+
+    if (paused) {
+      Text.renderText('PAUSED', 72, Game.canvasWidth/2 - 160, 120);
+    } else {
+      requestAnimFrame(mainLoop, canvasNode);
+    }
   };
 
-  var mainLoopId = setInterval(mainLoop, 25);
+  mainLoop();
 
   $(window).keydown(function (e) {
     switch (KEY_CODES[e.keyCode]) {
@@ -1245,13 +1285,11 @@ $(function () {
         showFramerate = !showFramerate;
         break;
       case 'p': // pause
-        if (mainLoopId) {
-          clearInterval(mainLoopId);
-          mainLoopId = null;
-          Text.renderText('PAUSED', 72, Game.canvasWidth/2 - 160, 120);
-        } else {
+        paused = !paused;
+        if (!paused) {
+          // start up again
           lastFrame = Date.now();
-          mainLoopId = setInterval(mainLoop, 10);
+          mainLoop();
         }
         break;
       case 'm': // mute
